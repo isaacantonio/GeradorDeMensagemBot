@@ -8,11 +8,13 @@ from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filte
 import re
 from datetime import datetime
 import asyncio
+import nest_asyncio
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
 # Flask app separado do Telegram app
 flask_app = Flask(__name__)
+nest_asyncio.apply()  # Corrige erro de loop já existente (Render)
 
 print("Bot iniciado...")
 
@@ -39,7 +41,6 @@ async def getProductDataShopee(link):
         price_text = price_regex[0] if price_regex else "Preço não encontrado"
 
         mensagem = f"🔥 {title}\n💬 Oferta especial pra você!\n💰 {price_text}\n🔗 {link}"
-
         return mensagem, img_url
 
     except Exception as e:
@@ -57,7 +58,6 @@ async def getProductDataAmzn(link):
         final_url = r.url
         r = requests.get(final_url, headers=headers, timeout=100)
 
-        # Salvar o HTML para debug com timestamp
         filename = f"amz_page_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
         with open(filename, "w", encoding="utf-8") as file:
             file.write(r.text)
@@ -125,7 +125,6 @@ async def getProductDataMercadoLivre(link):
                 "span", class_="andes-money-amount__fraction")
             cents_tag = current_price_container.find(
                 "span", class_="andes-money-amount__cents")
-
             if fraction_tag:
                 fraction = fraction_tag.get_text(strip=True)
                 cents = cents_tag.get_text(strip=True) if cents_tag else "00"
@@ -142,32 +141,30 @@ async def getProductDataMercadoLivre(link):
         return f"Erro ao processar link do Mercado Livre: {e}", None
 
 
-# Handler Telegram
+# Handler do Telegram
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
 
     if "shopee" in text:
         match = re.search(r'https:\/\/[^\s]+', text)
-        if match:
-            msg, image_url = await getProductDataShopee(match.group(0))
-        else:
-            msg, image_url = "Link da Shopee não encontrado.", None
+        msg, image_url = await getProductDataShopee(
+            match.group(0)) if match else ("Link da Shopee não encontrado.",
+                                           None)
 
     elif "mercadolivre.com" in text:
         match = re.search(r'https:\/\/[^\s]+', text)
-        if match:
-            msg, image_url = await getProductDataMercadoLivre(match.group(0))
-        else:
-            msg, image_url = "Link do Mercado Livre não encontrado.", None
+        msg, image_url = await getProductDataMercadoLivre(
+            match.group(0)
+        ) if match else ("Link do Mercado Livre não encontrado.", None)
 
     elif "amzn" in text or "amazon" in text:
         match = re.search(r'https:\/\/[^\s]+', text)
-        if match:
-            msg, image_url = await getProductDataAmzn(match.group(0))
-        else:
-            msg, image_url = "Link da Amazon não encontrado.", None
+        msg, image_url = await getProductDataAmzn(
+            match.group(0)) if match else ("Link da Amazon não encontrado.",
+                                           None)
+
     else:
-        msg, image_url = "Link válido não encontrado. Por favor envie um link da Shopee, Mercado Livre ou Amazon.", None
+        msg, image_url = "Link válido não encontrado. Envie um link da Shopee, Mercado Livre ou Amazon.", None
 
     if image_url:
         await context.bot.send_photo(chat_id=update.effective_chat.id,
@@ -180,25 +177,31 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                        parse_mode='Markdown')
 
 
+# Inicializa o bot
 async def run_telegram_bot():
     application = ApplicationBuilder().token(BOT_TOKEN).build()
     application.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    await application.run_polling()
+    await application.initialize()
+    await application.start()
+    await application.updater.start_polling()
+    print("Telegram bot está rodando...")
 
 
+# Rota de health check
 @flask_app.route("/")
 def home():
     return "Bot está rodando!", 200
 
 
+# Inicia o Flask
 def run_flask():
     flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
 
 
+# Main
 if __name__ == "__main__":
-    # Roda Flask em uma thread separada
     threading.Thread(target=run_flask, daemon=True).start()
-
-    # Roda o bot Telegram no main thread — sem threading e sem asyncio.run dentro da thread
-    asyncio.run(run_telegram_bot())
+    loop = asyncio.get_event_loop()
+    loop.create_task(run_telegram_bot())
+    loop.run_forever()
