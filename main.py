@@ -54,9 +54,9 @@ async def getProductDataAmzn(link):
         r = requests.get(final_url, headers=headers, timeout=100)
 
         # Salvar o HTML para debug com timestamp
-        # filename = f"amz_page_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
-        # with open(filename, "w", encoding="utf-8") as file:
-        #     file.write(r.text)
+        filename = f"amz_page_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
+        with open(filename, "w", encoding="utf-8") as file:
+            file.write(r.text)
 
         soup = BeautifulSoup(r.text, 'html.parser')
 
