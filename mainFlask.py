@@ -180,16 +180,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                        parse_mode='Markdown')
 
 
-# Função para rodar o bot Telegram
-def run_telegram_bot():
-
-    async def main():
-        application = ApplicationBuilder().token(BOT_TOKEN).build()
-        application.add_handler(
-            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-        await application.run_polling()
-
-    asyncio.run(main())
+async def run_telegram_bot():
+    application = ApplicationBuilder().token(BOT_TOKEN).build()
+    application.add_handler(
+        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    await application.run_polling()
 
 
 @flask_app.route("/")
@@ -197,7 +192,13 @@ def home():
     return "Bot está rodando!", 200
 
 
-if __name__ == "__main__":
-    # Rodar Telegram bot em thread separada
-    threading.Thread(target=run_telegram_bot, daemon=True).start()
+def run_flask():
     flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+
+
+if __name__ == "__main__":
+    # Roda Flask em uma thread separada
+    threading.Thread(target=run_flask, daemon=True).start()
+
+    # Roda o bot Telegram no main thread — sem threading e sem asyncio.run dentro da thread
+    asyncio.run(run_telegram_bot())
