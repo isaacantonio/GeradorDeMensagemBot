@@ -6,3 +6,4 @@ replit
 webdriver-manager
 telegram
 flask
+nest_asyncio
